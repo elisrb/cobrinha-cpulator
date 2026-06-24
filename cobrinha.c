@@ -6,10 +6,8 @@
 
 // CONSTANTES
 #define VGA_BASE 0xc8000000
-#define FPGA_CHAR_BASE 0xC9000000
 #define FPGA_PS2_KEYBOARD 0xFF200100
 #define MPCORE_PRIV_TIMER_LOAD 0xFF202000
-#define MPCORE_PRIV_TIMER_VALUE 0xFF202004
 #define MPCORE_PRIV_TIMER_CONTROL 0xFF202008
 #define MPCORE_PRIV_TIMER_STATUS 0xFF20200C
 
@@ -29,7 +27,6 @@
 #define HEIGHT 240
 
 #define TILE_SIZE 9
-#define SNAKE_MAX_SIZE  (WIDTH/TILE_SIZE)*(HEIGHT/TILE_SIZE)
 
 // DECLARAÇÃO DE VARIÁVEIS GLOBAIS
 uint16_t (*tela)[LWIDTH] = (uint16_t (*)[LWIDTH]) VGA_BASE;
@@ -108,16 +105,23 @@ char keyboard_input() {
     volatile int *ps2_pointer = (volatile int *) FPGA_PS2_KEYBOARD;
     int dados_ps2 = *ps2_pointer;
     if (dados_ps2 & 0x8000) {
-        switch ((unsigned char)(dados_ps2 & 0xFF)) {
-            case 0x74: return 'd'; // → Direita
-            case 0x6B: return 'e'; // ← Esquerda
-            default: return 0
+		unsigned char code = (unsigned char)(dados_ps2 & 0xFF);
+		printf("scan code: 0x%02X\n", code);
+        switch (code) {
+            case 0x74: // → Direita
+				return 'd';
+				break;
+            case 0x6B: // ← Esquerda
+				return 'e';
+				break;
+            default:
+				return 0;
         }
     }
     return 0;
 }
 
-void delay(int milisegundos) {
+void delay(int milisegundos) { // !!! TESTE PENDENTE
     volatile int *timer_load    = (volatile int *) MPCORE_PRIV_TIMER_LOAD;
     volatile int *timer_control = (volatile int *) MPCORE_PRIV_TIMER_CONTROL;
     volatile int *timer_status  = (volatile int *) MPCORE_PRIV_TIMER_STATUS;
@@ -142,5 +146,22 @@ int main() {
     show_tile(12,2,HEAD_RIGHT);
     show_tile(12,1,BODY);
     show_tile(12,0,TAIL_RIGHT);
+
+    int pos = 2;
+
+    while (1) {
+        char input = keyboard_input();
+        switch (input) {
+            case 'd':
+                pos += 1;
+                break;
+            case 'e':
+                pos -= 1;
+                break;
+        }
+		pos %= WIDTH/(TILE_SIZE+1);
+		show_tile(12,pos,HEAD_RIGHT);
+    }
+
 	return 0;
 }

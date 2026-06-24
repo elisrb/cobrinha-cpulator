@@ -30,9 +30,6 @@
 
 #define TILE_SIZE 9
 #define SNAKE_MAX_SIZE  (WIDTH/TILE_SIZE)*(HEIGHT/TILE_SIZE)
-	
-// DECLARAÇÃO DE FUNÇÕES	
-void tela_fundo();
 
 // DECLARAÇÃO DE VARIÁVEIS GLOBAIS
 uint16_t (*tela)[LWIDTH] = (uint16_t (*)[LWIDTH]) VGA_BASE;
@@ -105,6 +102,38 @@ void tela_fundo() {
 			show_pixel(l, c, cor_pixel);
 		}
 	}
+}
+
+char keyboard_input() {
+    volatile int *ps2_pointer = (volatile int *) FPGA_PS2_KEYBOARD;
+    int dados_ps2 = *ps2_pointer;
+    if (dados_ps2 & 0x8000) {
+        switch ((unsigned char)(dados_ps2 & 0xFF)) {
+            case 0x74: return 'd'; // → Direita
+            case 0x6B: return 'e'; // ← Esquerda
+            default: return 0
+        }
+    }
+    return 0;
+}
+
+void delay(int milisegundos) {
+    volatile int *timer_load    = (volatile int *) MPCORE_PRIV_TIMER_LOAD;
+    volatile int *timer_control = (volatile int *) MPCORE_PRIV_TIMER_CONTROL;
+    volatile int *timer_status  = (volatile int *) MPCORE_PRIV_TIMER_STATUS;
+
+    if (milisegundos <= 0) return;
+
+    int ciclos_totais = milisegundos * 100000;
+    *timer_load    = ciclos_totais;
+    *timer_status  = 1;
+    *timer_control = 0x1;
+
+    while ((*timer_status & 0x1) == 0) {
+        // aguarda expiração
+    }
+
+    *timer_control = 0x0;
 }
 
 // MAIN

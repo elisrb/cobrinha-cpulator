@@ -14,7 +14,9 @@ Se a cobra atingir o seu corpo, ela morre e encerra o jogo. Se atingir o limite 
 ## Como jogar
 1. Cole o código em `cobrinha.c` no [simulador ARMv7 (De1-SoC) no CPUlator](https://cpulator.01xz.net/?sys=arm-de1soc)
 2. Clique em `Compile and Load (F5)` e, em seguida, em `Continue (F3)`
-4. Use as setas para virar a cobrinha para esquerda ou direita
+3. O jogo deve aparecer na seção **VGA pixel buffer** no painel **Devices** (a imagem pode ser ampliada clicando na seta para baixo na seção e aumentando o zoom)
+4. Clique no campo `Type here:` na seção **PS/2 keyboard or mouse** no painel **Devices** para ativar o cursor
+5. Use as setas para virar a cobrinha para esquerda ou direita
 
 ## Implementação
 Para mais detalhes de implementação, veja `relatorio.pdf`

@@ -7,9 +7,6 @@
 // CONSTANTES
 #define VGA_BASE 0xc8000000
 #define FPGA_PS2_KEYBOARD 0xFF200100
-#define MPCORE_PRIV_TIMER_LOAD 0xFF202000
-#define MPCORE_PRIV_TIMER_CONTROL 0xFF202008
-#define MPCORE_PRIV_TIMER_STATUS 0xFF20200C
 
 #define BLUE 0x001F
 #define RED 0xF800
@@ -29,19 +26,22 @@
 #define TILE_SIZE 9
 #define BG_COLOR BLACK
 #define GRID_COLOR GRAY
+	
+#define SNAKE_MAX_SIZE 100
 
 // DECLARAÇÃO DE VARIÁVEIS GLOBAIS
-int head_pos[2] = {12, 2}; // posição inicial da cabeça
-int direction = 2; // direção inicial (direita)
-/*	DIREÇÕES
-	0 - Esquerda
-	1 - Cima			1
-	2 - Direita		0		2
-	3 - Baixo			3
-*/
-
 const int max_c = WIDTH/(TILE_SIZE+1);
 const int max_l = HEIGHT/(TILE_SIZE+1);
+int pos[SNAKE_MAX_SIZE][2]; // posição atual da cobra, a partir da cabeça
+int old_pos[SNAKE_MAX_SIZE][2]; // posições antigas da cobra, a partir da cabeça
+int snake_size = 5; // tamanho inicial da cobra
+int direction = 2; // direção inicial (direita)
+/*	DIREÇÕES
+    0 - Esquerda
+    1 - Cima			1
+    2 - Direita		0		2
+    3 - Baixo			3
+*/
 
 uint16_t (*tela)[LWIDTH] = (uint16_t (*)[LWIDTH]) VGA_BASE;
 
@@ -84,9 +84,7 @@ const uint16_t TAIL_RIGHT[9][9] = {
 // FUNÇÕES
 void show_pixel(int l, int c, uint16_t cor) {
     if (l >= 0 && l < HEIGHT && c >= 0 && c < WIDTH) {
-        if (cor != TRANS) {
-            tela[l][c] = cor;
-        }
+        if (cor != TRANS) tela[l][c] = cor;
     }
 }
 
@@ -116,11 +114,8 @@ void tela_fundo() {
     uint16_t cor_pixel;
 	for (int l=0; l < HEIGHT; l++) {
 		for (int c=0; c < WIDTH; c++) {
-			if((l%(TILE_SIZE+1) == 0) || (c%(TILE_SIZE+1) == 0)){
-				cor_pixel = GRID_COLOR;
-			} else {
-				cor_pixel = BG_COLOR;
-			}
+			if((l%(TILE_SIZE+1) == 0) || (c%(TILE_SIZE+1) == 0)) cor_pixel = GRID_COLOR;
+			else cor_pixel = BG_COLOR;			
 			show_pixel(l, c, cor_pixel);
 		}
 	}
@@ -128,46 +123,69 @@ void tela_fundo() {
 
 char keyboard_input() {
     volatile int *ps2_pointer = (volatile int *) FPGA_PS2_KEYBOARD;
-    int dados_ps2 = *ps2_pointer;
+
+    static char break_next = 0; // hlag: próximo código é um break (tecla solta)
+    static char last_valid = 0; // último scancode de make lido
     
-    // Lê o registrador até esvaziar o buffer FIFO do teclado de cliques antigos repetidos
-    char ultimo_comando = 0;
+    char novo_comando = 0;
+
+    int dados_ps2 = *ps2_pointer;
     while (dados_ps2 & 0x8000) {
         unsigned char code = (unsigned char)(dados_ps2 & 0xFF);
-        if (code == 0x74) ultimo_comando = 'd';
-        if (code == 0x6B) ultimo_comando = 'e';
+        if (break_next) {
+            if (code == last_valid) last_valid = 0;
+            break_next = 0;
+        } else if (code == 0xF0) { // próximo byte é o break code
+            break_next = 1;
+        } else {
+            if (code != last_valid) {
+                last_valid = code;
+                if (code == 0x74) novo_comando = 'd';
+                if (code == 0x6B) novo_comando = 'e';
+            }
+        }
         dados_ps2 = *ps2_pointer;
     }
-    return ultimo_comando;
+
+    return novo_comando;
 }
 
 void delay(int tempo) {
     if (tempo <= 0) return;
     volatile int contador;
-    int limite = tempo * 50000; 
-	for (contador = 0; contador < limite; contador++) {
+    int limite = tempo * 5000; 
+    for (contador = 0; contador < limite; contador++) {
         asm("nop");
     }
 }
 
+void show_snake() {
+    show_tile(pos[0][0], pos[0][1], HEAD_RIGHT);
+    for (int i = 1; i < (snake_size-1); i++) show_tile(pos[i][0], pos[i][1], BODY);
+    show_tile(pos[snake_size-1][0], pos[snake_size-1][1], TAIL_RIGHT);
+}
+
 // MAIN
 int main() {
+    // posições iniciais da cobra
+    pos[0][0] = 12; pos[0][1] = 4;
+    pos[1][0] = 12; pos[1][1] = 3;
+    pos[2][0] = 12; pos[2][1] = 2;
+    pos[3][0] = 12; pos[3][1] = 1;
+    pos[4][0] = 12; pos[4][1] = 0;
+    
 	tela_fundo();
-	int old_pos[2] = {0, 0};
 	
-    while (1) {
-		show_tile(head_pos[0], head_pos[1], HEAD_RIGHT);
-		clear_tile(old_pos[0], old_pos[1]);
+	int perdeu = 0;
+    while (!perdeu) { // loop do jogo
+		// imprime a cobra na nova posição
+		show_snake();
 		
-        char input = 0;
-		for (int i = 0; i < 100; i++) {
-            char clique = keyboard_input();
-            if (clique != 0) {
-                input = clique; // Salva o último clique válido feito nessa janela de tempo
-            }
-            delay(1); // Um delay curtíssimo apenas para cadenciar o loop de leitura
-        }
+		// lê input do teclado
+        char input = keyboard_input();
+        delay(30);
 		
+		// muda a direção da cobra dependendo do input
         switch (input) {
             case 'd':
 				direction = (direction + 1) % 4;
@@ -177,26 +195,36 @@ int main() {
                 break;
         }
 		
-		old_pos[0] = head_pos[0];
-		old_pos[1] = head_pos[1];
-		
+		// salva a última posição da cobra
+		for (int i = 0; i < snake_size; i++) {
+            old_pos[i][0] = pos[i][0];
+            old_pos[i][1] = pos[i][1];
+        }
+
+		// calcula a nova posição da cabeça
 		switch (direction) {
 			case 0:
-				head_pos[1] = (head_pos[1] - 1 + max_c) % max_c;
+				pos[0][1] = (pos[0][1] - 1 + max_c) % max_c;
 				break;
 			case 1:
-				head_pos[0] = (head_pos[0] - 1 + max_l) % max_l;
+				pos[0][0] = (pos[0][0] - 1 + max_l) % max_l;
 				break;
 			case 2:
-				head_pos[1] = (head_pos[1] + 1) % max_c;
+				pos[0][1] = (pos[0][1] + 1) % max_c;
 				break;
 			case 3:
-				head_pos[0] = (head_pos[0] + 1) % max_l;
+				pos[0][0] = (pos[0][0] + 1) % max_l;
 				break;
-		}
 		
-		delay(5);
-    }
+        // calcula as próximas posições do restante da cobra
+        for (int i = 1; i < snake_size; i++) {
+            pos[i][0] = old_pos[i-1][0];
+            pos[i][1] = old_pos[i-1][1];
+        }
 
+		// apaga as posições antigas da cobra
+        for (int i = 0; i < snake_size; i++) clear_tile(old_pos[i][0], old_pos[i][1]);
+        }
+    }
 	return 0;
 }

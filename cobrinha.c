@@ -215,7 +215,7 @@ int main() {
 			case 3:
 				pos[0][0] = (pos[0][0] + 1) % max_l;
 				break;
-		
+        }
         // calcula as próximas posições do restante da cobra
         for (int i = 1; i < snake_size; i++) {
             pos[i][0] = old_pos[i-1][0];
@@ -224,7 +224,6 @@ int main() {
 
 		// apaga as posições antigas da cobra
         for (int i = 0; i < snake_size; i++) clear_tile(old_pos[i][0], old_pos[i][1]);
-        }
     }
 	return 0;
 }

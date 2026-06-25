@@ -147,20 +147,21 @@ int main() {
     show_tile(12,1,BODY);
     show_tile(12,0,TAIL_RIGHT);
 
-    int pos = 2;
+    int head_pos = 2;
 
     while (1) {
         char input = keyboard_input();
         switch (input) {
             case 'd':
-                pos += 1;
+                head_pos += 1;
                 break;
             case 'e':
-                pos -= 1;
+                head_pos -= 1;
                 break;
         }
-		pos %= WIDTH/(TILE_SIZE+1);
-		show_tile(12,pos,HEAD_RIGHT);
+		int max_cols = WIDTH/(TILE_SIZE+1);
+		head_pos = (head_pos + max_cols) % max_cols;
+		show_tile(12,head_pos,HEAD_RIGHT);
     }
 
 	return 0;

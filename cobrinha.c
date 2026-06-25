@@ -27,8 +27,22 @@
 #define HEIGHT 240
 
 #define TILE_SIZE 9
+#define BG_COLOR BLACK
+#define GRID_COLOR GRAY
 
 // DECLARAÇÃO DE VARIÁVEIS GLOBAIS
+int head_pos[2] = {12, 2}; // posição inicial da cabeça
+int direction = 2; // direção inicial (direita)
+/*	DIREÇÕES
+	0 - Esquerda
+	1 - Cima			1
+	2 - Direita		0		2
+	3 - Baixo			3
+*/
+
+const int max_c = WIDTH/(TILE_SIZE+1);
+const int max_l = HEIGHT/(TILE_SIZE+1);
+
 uint16_t (*tela)[LWIDTH] = (uint16_t (*)[LWIDTH]) VGA_BASE;
 
 const uint16_t HEAD_RIGHT[9][9] = {
@@ -87,14 +101,25 @@ void show_tile(int grid_l, int grid_c, uint16_t tile[TILE_SIZE][TILE_SIZE]) {
     }
 }
 
+void clear_tile(int grid_l, int grid_c) {
+    int pixel_l = grid_l * (TILE_SIZE+1) + 1;
+    int pixel_c = grid_c * (TILE_SIZE+1) + 1;
+
+    for (int l = 0; l < TILE_SIZE; l++) {
+        for (int c = 0; c < TILE_SIZE; c++) {
+            show_pixel(pixel_l+l, pixel_c+c, BG_COLOR);
+        }
+    }
+}
+
 void tela_fundo() {
     uint16_t cor_pixel;
 	for (int l=0; l < HEIGHT; l++) {
 		for (int c=0; c < WIDTH; c++) {
 			if((l%(TILE_SIZE+1) == 0) || (c%(TILE_SIZE+1) == 0)){
-				cor_pixel = GRAY;
+				cor_pixel = GRID_COLOR;
 			} else {
-				cor_pixel = BLACK;
+				cor_pixel = BG_COLOR;
 			}
 			show_pixel(l, c, cor_pixel);
 		}
@@ -104,64 +129,73 @@ void tela_fundo() {
 char keyboard_input() {
     volatile int *ps2_pointer = (volatile int *) FPGA_PS2_KEYBOARD;
     int dados_ps2 = *ps2_pointer;
-    if (dados_ps2 & 0x8000) {
-		unsigned char code = (unsigned char)(dados_ps2 & 0xFF);
-		printf("scan code: 0x%02X\n", code);
-        switch (code) {
-            case 0x74: // → Direita
-				return 'd';
-				break;
-            case 0x6B: // ← Esquerda
-				return 'e';
-				break;
-            default:
-				return 0;
-        }
+    
+    // Lê o registrador até esvaziar o buffer FIFO do teclado de cliques antigos repetidos
+    char ultimo_comando = 0;
+    while (dados_ps2 & 0x8000) {
+        unsigned char code = (unsigned char)(dados_ps2 & 0xFF);
+        if (code == 0x74) ultimo_comando = 'd';
+        if (code == 0x6B) ultimo_comando = 'e';
+        dados_ps2 = *ps2_pointer;
     }
-    return 0;
+    return ultimo_comando;
 }
 
-void delay(int milisegundos) { // !!! TESTE PENDENTE
-    volatile int *timer_load    = (volatile int *) MPCORE_PRIV_TIMER_LOAD;
-    volatile int *timer_control = (volatile int *) MPCORE_PRIV_TIMER_CONTROL;
-    volatile int *timer_status  = (volatile int *) MPCORE_PRIV_TIMER_STATUS;
-
-    if (milisegundos <= 0) return;
-
-    int ciclos_totais = milisegundos * 100000;
-    *timer_load    = ciclos_totais;
-    *timer_status  = 1;
-    *timer_control = 0x1;
-
-    while ((*timer_status & 0x1) == 0) {
-        // aguarda expiração
+void delay(int tempo) {
+    if (tempo <= 0) return;
+    volatile int contador;
+    int limite = tempo * 50000; 
+	for (contador = 0; contador < limite; contador++) {
+        asm("nop");
     }
-
-    *timer_control = 0x0;
 }
 
 // MAIN
 int main() {
 	tela_fundo();
-    show_tile(12,2,HEAD_RIGHT);
-    show_tile(12,1,BODY);
-    show_tile(12,0,TAIL_RIGHT);
-
-    int head_pos = 2;
-
+	int old_pos[2] = {0, 0};
+	
     while (1) {
-        char input = keyboard_input();
+		show_tile(head_pos[0], head_pos[1], HEAD_RIGHT);
+		clear_tile(old_pos[0], old_pos[1]);
+		
+        char input = 0;
+		for (int i = 0; i < 100; i++) {
+            char clique = keyboard_input();
+            if (clique != 0) {
+                input = clique; // Salva o último clique válido feito nessa janela de tempo
+            }
+            delay(1); // Um delay curtíssimo apenas para cadenciar o loop de leitura
+        }
+		
         switch (input) {
             case 'd':
-                head_pos += 1;
+				direction = (direction + 1) % 4;
                 break;
             case 'e':
-                head_pos -= 1;
+				direction = (direction + 3) % 4;
                 break;
         }
-		int max_cols = WIDTH/(TILE_SIZE+1);
-		head_pos = (head_pos + max_cols) % max_cols;
-		show_tile(12,head_pos,HEAD_RIGHT);
+		
+		old_pos[0] = head_pos[0];
+		old_pos[1] = head_pos[1];
+		
+		switch (direction) {
+			case 0:
+				head_pos[1] = (head_pos[1] - 1 + max_c) % max_c;
+				break;
+			case 1:
+				head_pos[0] = (head_pos[0] - 1 + max_l) % max_l;
+				break;
+			case 2:
+				head_pos[1] = (head_pos[1] + 1) % max_c;
+				break;
+			case 3:
+				head_pos[0] = (head_pos[0] + 1) % max_l;
+				break;
+		}
+		
+		delay(5);
     }
 
 	return 0;

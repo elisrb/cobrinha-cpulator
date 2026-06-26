@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 // CONSTANTES
 #define VGA_BASE 0xc8000000
@@ -32,6 +33,8 @@
 // DECLARAÇÃO DE VARIÁVEIS GLOBAIS
 const int max_c = WIDTH/(TILE_SIZE+1);
 const int max_l = HEIGHT/(TILE_SIZE+1);
+int maca_c;
+int maca_l;
 int pos[SNAKE_MAX_SIZE][2]; // posição atual da cobra, a partir da cabeça
 int old_pos[SNAKE_MAX_SIZE][2]; // posições antigas da cobra, a partir da cabeça
 int snake_size = 5; // tamanho inicial da cobra
@@ -45,6 +48,7 @@ int direction = 2; // direção inicial (direita)
 
 uint16_t (*tela)[LWIDTH] = (uint16_t (*)[LWIDTH]) VGA_BASE;
 
+// DECLARAÇÃO DE SPRITES
 const uint16_t HEAD_RIGHT[9][9] = {
     {TRANS , TRANS , BLACK , BLACK , BLACK , BLACK , BLACK , TRANS , TRANS },
     {TRANS , BLACK , GREEN , GREEN , BLACK , WHITE , WHITE , BLACK , TRANS },
@@ -92,6 +96,8 @@ const uint16_t HEAD_DOWN[9][9] = {
     {TRANS , BLACK , GREEN , GREEN , RED   , GREEN , GREEN , BLACK , TRANS },
     {TRANS , TRANS , TRANS , BLACK , BLACK , BLACK , TRANS , TRANS , TRANS }
 };
+
+const uint16_t (*HEAD[4])[9] = { HEAD_LEFT, HEAD_UP, HEAD_RIGHT, HEAD_DOWN };
 
 const uint16_t TAIL_RIGHT[9][9] = {
     {TRANS , TRANS , TRANS , BLACK , BLACK , BLACK , BLACK , TRANS , TRANS },
@@ -141,6 +147,8 @@ const uint16_t TAIL_DOWN[9][9] = {
     {TRANS , TRANS , BLACK , BLACK , BLACK , BLACK , BLACK , TRANS , TRANS }
 };
 
+const uint16_t (*TAIL[4])[9] = { TAIL_LEFT, TAIL_UP, TAIL_RIGHT, TAIL_DOWN };
+
 const uint16_t BODY[9][9] = {
     {TRANS, TRANS, BLACK, BLACK, BLACK, BLACK, BLACK, TRANS, TRANS},
     {TRANS, BLACK, GREEN, GREEN, GREEN, GREEN, GREEN, BLACK, TRANS},
@@ -153,9 +161,17 @@ const uint16_t BODY[9][9] = {
     {TRANS, TRANS, BLACK, BLACK, BLACK, BLACK, BLACK, TRANS, TRANS}
 };
 
-// Indexado pela direção (0=esq, 1=cima, 2=dir, 3=baixo)
-const uint16_t (*HEAD[4])[9] = { HEAD_LEFT, HEAD_UP, HEAD_RIGHT, HEAD_DOWN };
-const uint16_t (*TAIL[4])[9] = { TAIL_LEFT, TAIL_UP, TAIL_RIGHT, TAIL_DOWN };
+const uint16_t MACA[9][9] = {
+    {TRANS, TRANS, BLACK, BLACK, BLACK, GREEN, GREEN, TRANS, TRANS},
+    {TRANS, BLACK, RED,   RED,   RED,   GREEN, GREEN, BLACK, TRANS},
+    {BLACK, RED,   RED,   RED,   RED,   GREEN, RED,   RED,   BLACK},
+    {BLACK, RED,   RED,   RED,   RED,   RED,   RED,   RED,   BLACK},
+    {BLACK, RED,   RED,   RED,   RED,   RED,   RED,   RED,   BLACK},
+    {BLACK, RED,   RED,   RED,   RED,   RED,   RED,   RED,   BLACK},
+    {BLACK, RED,   RED,   RED,   RED,   RED,   RED,   RED,   BLACK},
+    {TRANS, BLACK, RED,   RED,   RED,   RED,   RED,   BLACK, TRANS},
+    {TRANS, TRANS, BLACK, BLACK, BLACK, BLACK, BLACK, TRANS, TRANS}
+};
 
 // FUNÇÕES
 void show_pixel(int l, int c, uint16_t cor) {
@@ -241,8 +257,16 @@ void show_snake() {
     show_tile(pos[snake_size-1][0], pos[snake_size-1][1], TAIL[direction]);
 }
 
+void new_maca() {
+    maca_l = rand() % max_l;
+    maca_c = rand() % max_c;
+    show_tile(maca_l, maca_c, MACA);
+}
+
 // MAIN
 int main() {
+    srand(time(NULL));
+
     // posições iniciais da cobra
     pos[0][0] = 12; pos[0][1] = 4;
     pos[1][0] = 12; pos[1][1] = 3;
@@ -251,6 +275,9 @@ int main() {
     pos[4][0] = 12; pos[4][1] = 0;
     
 	tela_fundo();
+
+    // inicializa a maçã
+    new_maca();
 	
 	int perdeu = 0;
     while (!perdeu) { // loop do jogo
@@ -259,7 +286,7 @@ int main() {
 		
 		// lê input do teclado
         char input = keyboard_input();
-        delay(30);
+        delay(20);
 		
 		// muda a direção da cobra dependendo do input
         switch (input) {
@@ -292,10 +319,23 @@ int main() {
 				pos[0][0] = (pos[0][0] + 1) % max_l;
 				break;
         }
+
         // calcula as próximas posições do restante da cobra
         for (int i = 1; i < snake_size; i++) {
             pos[i][0] = old_pos[i-1][0];
             pos[i][1] = old_pos[i-1][1];
+        }
+
+        // checa se a cobra comeu a maçã
+        if (pos[0][0] == maca_l && pos[0][1] == maca_c) {
+            new_maca();
+            snake_size++;
+        }
+
+        // checa se a cobra colidiu consigo mesma e valida a posição da maçã
+        for (int i = 1; i < snake_size; i++) {
+            if (pos[0][0] == pos[i][0] && pos[0][1] == pos[i][1]) perdeu = 1;
+            if (maca_l == pos[i][0] && maca_c == pos[i][1]) new_maca();
         }
 
 		// apaga as posições antigas da cobra

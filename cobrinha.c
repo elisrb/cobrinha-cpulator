@@ -27,24 +27,12 @@
 #define TILE_SIZE 9
 #define BG_COLOR BLACK
 #define GRID_COLOR GRAY
-	
+    
 #define SNAKE_MAX_SIZE 100
 
 // DECLARAÇÃO DE VARIÁVEIS GLOBAIS
-const int max_c = WIDTH/(TILE_SIZE+1);
-const int max_l = HEIGHT/(TILE_SIZE+1);
-int maca_c;
-int maca_l;
-int pos[SNAKE_MAX_SIZE][2]; // posição atual da cobra, a partir da cabeça
-int old_pos[SNAKE_MAX_SIZE][2]; // posições antigas da cobra, a partir da cabeça
-int snake_size = 5; // tamanho inicial da cobra
-int direction = 2; // direção inicial (direita)
-/*	DIREÇÕES
-    0 - Esquerda
-    1 - Cima			1
-    2 - Direita		0		2
-    3 - Baixo			3
-*/
+const int max_c = WIDTH / (TILE_SIZE + 1);
+const int max_l = HEIGHT / (TILE_SIZE + 1);
 
 uint16_t (*tela)[LWIDTH] = (uint16_t (*)[LWIDTH]) VGA_BASE;
 
@@ -180,45 +168,44 @@ void show_pixel(int l, int c, uint16_t cor) {
     }
 }
 
-void show_tile(int grid_l, int grid_c, uint16_t tile[TILE_SIZE][TILE_SIZE]) {
-    int pixel_l = grid_l * (TILE_SIZE+1) + 1;
-    int pixel_c = grid_c * (TILE_SIZE+1) + 1;
+void show_tile(int grid_l, int grid_c, const uint16_t tile[TILE_SIZE][TILE_SIZE]) {
+    int pixel_l = grid_l * (TILE_SIZE + 1) + 1;
+    int pixel_c = grid_c * (TILE_SIZE + 1) + 1;
 
     for (int l = 0; l < TILE_SIZE; l++) {
         for (int c = 0; c < TILE_SIZE; c++) {
-            show_pixel(pixel_l+l, pixel_c+c, tile[l][c]);
+            show_pixel(pixel_l + l, pixel_c + c, tile[l][c]);
         }
     }
 }
 
 void clear_tile(int grid_l, int grid_c) {
-    int pixel_l = grid_l * (TILE_SIZE+1) + 1;
-    int pixel_c = grid_c * (TILE_SIZE+1) + 1;
+    int pixel_l = grid_l * (TILE_SIZE + 1) + 1;
+    int pixel_c = grid_c * (TILE_SIZE + 1) + 1;
 
     for (int l = 0; l < TILE_SIZE; l++) {
         for (int c = 0; c < TILE_SIZE; c++) {
-            show_pixel(pixel_l+l, pixel_c+c, BG_COLOR);
+            show_pixel(pixel_l + l, pixel_c + c, BG_COLOR);
         }
     }
 }
 
 void tela_fundo() {
-    uint16_t cor_pixel;
-	for (int l=0; l < HEIGHT; l++) {
-		for (int c=0; c < WIDTH; c++) {
-			if((l%(TILE_SIZE+1) == 0) || (c%(TILE_SIZE+1) == 0)) cor_pixel = GRID_COLOR;
-			else cor_pixel = BG_COLOR;			
-			show_pixel(l, c, cor_pixel);
-		}
-	}
+    for (int l = 0; l < HEIGHT; l++) {
+        for (int c = 0; c < WIDTH; c++) {
+            if ((l % (TILE_SIZE + 1) == 0) || (c % (TILE_SIZE + 1) == 0)) {
+                show_pixel(l, c, GRID_COLOR);
+            } else {
+                show_pixel(l, c, BG_COLOR);
+            }
+        }
+    }
 }
 
 char keyboard_input() {
     volatile int *ps2_pointer = (volatile int *) FPGA_PS2_KEYBOARD;
-
-    static char break_next = 0; // hlag: próximo código é um break (tecla solta)
-    static char last_valid = 0; // último scancode de make lido
-    
+    static char break_next = 0;
+    static char last_valid = 0; 
     char novo_comando = 0;
 
     int dados_ps2 = *ps2_pointer;
@@ -238,7 +225,6 @@ char keyboard_input() {
         }
         dados_ps2 = *ps2_pointer;
     }
-
     return novo_comando;
 }
 
@@ -251,21 +237,39 @@ void delay(int tempo) {
     }
 }
 
-void show_snake() {
+void show_snake(int pos[SNAKE_MAX_SIZE][2], int snake_size, int direction) {
     show_tile(pos[0][0], pos[0][1], HEAD[direction]);
-    for (int i = 1; i < (snake_size-1); i++) show_tile(pos[i][0], pos[i][1], BODY);
-    show_tile(pos[snake_size-1][0], pos[snake_size-1][1], TAIL[direction]);
+    for (int i = 1; i < (snake_size - 1); i++) show_tile(pos[i][0], pos[i][1], BODY);
+    show_tile(pos[snake_size - 1][0], pos[snake_size - 1][1], TAIL[direction]);
 }
 
-void new_maca() {
-    maca_l = rand() % max_l;
-    maca_c = rand() % max_c;
-    show_tile(maca_l, maca_c, MACA);
+void gerar_maca(int *maca_l, int *maca_c, int pos[SNAKE_MAX_SIZE][2], int snake_size) {
+    int valido = 0;
+    while (!valido) {
+        valido = 1;
+        *maca_l = rand() % max_l;
+        *maca_c = rand() % max_c;
+
+        // checa se a maçã não apareceu em cima do corpo da cobra
+        for (int i = 0; i < snake_size; i++) {
+            if (pos[i][0] == *maca_l && pos[i][1] == *maca_c) {
+                valido = 0;
+                break;
+            }
+        }
+    }
 }
 
 // MAIN
-int main() {
-    srand(time(NULL));
+int main() { // loop do jogo
+    srand(*(volatile int *) 0xFFFEC600); // usa o timer como seed para geração aleatória de números
+
+    // variáveis de controle
+    int pos[SNAKE_MAX_SIZE][2];
+    int old_pos[SNAKE_MAX_SIZE][2];
+    int snake_size = 5;
+    int direction = 2;
+    int maca_l, maca_c;
 
     // posições iniciais da cobra
     pos[0][0] = 12; pos[0][1] = 4;
@@ -274,72 +278,74 @@ int main() {
     pos[3][0] = 12; pos[3][1] = 1;
     pos[4][0] = 12; pos[4][1] = 0;
     
-	tela_fundo();
-
-    // inicializa a maçã
-    new_maca();
-	
-	int perdeu = 0;
-    while (!perdeu) { // loop do jogo
-		// imprime a cobra na nova posição
-		show_snake();
-		
-		// lê input do teclado
+    tela_fundo();
+    gerar_maca(&maca_l, &maca_c, pos, snake_size);
+    
+    int perdeu = 0;
+    while (!perdeu) {
+        // imprime a cobra na nova posição
+        show_snake(pos, snake_size, direction);
+        // caso a cauda da cobra tenha passado por cima da maçã, desenha de novo
+        show_tile(maca_l, maca_c, MACA);
+        
+        // lê input do teclado
         char input = keyboard_input();
         delay(20);
-		
-		// muda a direção da cobra dependendo do input
+        
+        // muda a direção da cobra dependendo do input
         switch (input) {
             case 'd':
-				direction = (direction + 1) % 4;
+                direction = (direction + 1) % 4;
                 break;
             case 'e':
-				direction = (direction + 3) % 4;
+                direction = (direction + 3) % 4;
                 break;
         }
-		
-		// salva a última posição da cobra
-		for (int i = 0; i < snake_size; i++) {
+        
+        // salva a última posição da cobra
+        for (int i = 0; i < snake_size; i++) {
             old_pos[i][0] = pos[i][0];
             old_pos[i][1] = pos[i][1];
         }
 
-		// calcula a nova posição da cabeça
-		switch (direction) {
-			case 0:
-				pos[0][1] = (pos[0][1] - 1 + max_c) % max_c;
-				break;
-			case 1:
-				pos[0][0] = (pos[0][0] - 1 + max_l) % max_l;
-				break;
-			case 2:
-				pos[0][1] = (pos[0][1] + 1) % max_c;
-				break;
-			case 3:
-				pos[0][0] = (pos[0][0] + 1) % max_l;
-				break;
+        // calcula a nova posição da cabeça
+        switch (direction) {
+            case 0:
+                pos[0][1] = (pos[0][1] - 1 + max_c) % max_c;
+                break;
+            case 1:
+                pos[0][0] = (pos[0][0] - 1 + max_l) % max_l;
+                break;
+            case 2:
+                pos[0][1] = (pos[0][1] + 1) % max_c;
+                break;
+            case 3:
+                pos[0][0] = (pos[0][0] + 1) % max_l;
+                break;
         }
 
-        // calcula as próximas posições do restante da cobra
+        // calcula a nova posição do do resto do corpo
         for (int i = 1; i < snake_size; i++) {
-            pos[i][0] = old_pos[i-1][0];
-            pos[i][1] = old_pos[i-1][1];
+            pos[i][0] = old_pos[i - 1][0];
+            pos[i][1] = old_pos[i - 1][1];
+        }
+
+        // apaga a ponta da cauda antiga
+        clear_tile(old_pos[snake_size - 1][0], old_pos[snake_size - 1][1]);
+
+        // checa se a cabeça colidiu com o corpo
+        for (int i = 1; i < snake_size; i++) {
+            if (pos[0][0] == pos[i][0] && pos[0][1] == pos[i][1]) perdeu = 1;
         }
 
         // checa se a cobra comeu a maçã
         if (pos[0][0] == maca_l && pos[0][1] == maca_c) {
-            new_maca();
+            // inicializa nova posição da cauda
+            pos[snake_size][0] = old_pos[snake_size - 1][0];
+            pos[snake_size][1] = old_pos[snake_size - 1][1];
             snake_size++;
+            gerar_maca(&maca_l, &maca_c, pos, snake_size);
         }
-
-        // checa se a cobra colidiu consigo mesma e valida a posição da maçã
-        for (int i = 1; i < snake_size; i++) {
-            if (pos[0][0] == pos[i][0] && pos[0][1] == pos[i][1]) perdeu = 1;
-            if (maca_l == pos[i][0] && maca_c == pos[i][1]) new_maca();
-        }
-
-		// apaga as posições antigas da cobra
-        for (int i = 0; i < snake_size; i++) clear_tile(old_pos[i][0], old_pos[i][1]);
     }
-	return 0;
+    return 0;
 }

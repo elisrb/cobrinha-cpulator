@@ -2,8 +2,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <time.h>
 
 // CONSTANTES
 #define VGA_BASE 0xc8000000
